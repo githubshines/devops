@@ -19,7 +19,7 @@ a. This expects source to be github , perform the codebuild, and deploy the lamb
 **Part B**
 i) Connect to the RDS created in Step 5 from your desktop without ssh tunneling, but by using vpn.
 
-**In Completed sections****
+**In-Completed sections****
 
 1. Deploy an aws client vpn in the vpc using CFN template
 2. Connect to the RDS created in Step 5 from your desktop without ssh tunneling, but by using vpn.
@@ -27,10 +27,10 @@ i) Connect to the RDS created in Step 5 from your desktop without ssh tunneling,
 
 **Folder Structure**
 
-1. APIGW-Lambda : This folder contains the cloudformation template to create the API gateway which integrates with a Lambda pertaining to Part A i) and ii)
-2. CICD : This folder contains the CICD pipeline cloudformation script to create and deploy a Lambda using code pipeline pertaining to Part A iii)
-3. PSQL : This folder contains the cloudformation template to deploy a PSQL RDS pertaining to 4)
-4. VPC-Subnets : This folder contains the cloudformation scripts to deploy VPC and peering connection pertaining to 1,2 and 5
+1. **APIGW-Lambda** : This folder contains the cloudformation template to create the API gateway which integrates with a Lambda pertaining to Part A i) and ii)
+2. **CICD** : This folder contains the CICD pipeline cloudformation script to create and deploy a Lambda using code pipeline pertaining to Part A iii)
+3. **PSQL** : This folder contains the cloudformation template to deploy a PSQL RDS pertaining to 4)
+4. **VPC-Subnets** : This folder contains the cloudformation scripts to deploy VPC and peering connection pertaining to 1,2 and 5
 
 **Installation**
 
@@ -44,11 +44,11 @@ This stack exports VPCID, VPC-CIDR, Subnet ID's, Subnet ID CIDRs which will be i
 
 Create the psql rds using cloudformation script present in PSQL folder. Run the "CreatePSQL.bat" to deplo the PSQL which runs the command as below
 
-**PSQL **: aws cloudformation create-stack --stack-name PSQL --template-body file://rds.yaml
+**PSQL**: aws cloudformation create-stack --stack-name PSQL --template-body file://rds.yaml
 
 Create API Gateway by using the cloudformation script inside APIGW-Lambda folder. Run the command CreateAPIGateway.bat to create API gateway and Lambda function
 
-**APIGateway **: aws cloudformation create-stack --stack-name APIGW-Lambda --template-body file://api-gw.yaml --capabilities CAPABILITY_IAM
+**APIGateway**: aws cloudformation create-stack --stack-name APIGW-Lambda --template-body file://api-gw.yaml --capabilities CAPABILITY_IAM
 
 **Code Pipeline** : Code build and Code pipeline deployment using CLoudformation. Run the bat file CreateRoleandCode.bat followed by CreateMasterBranch.bat to deploy the stack. It also deploys a Lambda using CLoudformation within the pipeline with Manual approval stage for the code deployment.
 
