@@ -71,6 +71,8 @@ Used AWS SecretsManager to store the PSQL credentials
 
 **Screenshot references**
 
+![1709544020091](images/README/1709544020091.png)
+
 ![1709542616953](images/README/1709542616953.png)
 
 
