@@ -1,0 +1,108 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  AWS CloudFormation template to build an Amazon DynamoDB table and AWS Lambda
+Parameters:
+  ReadCapacityUnits:
+    Description: Provisioned read throughput
+    Type: Number
+    Default: 5
+    MinValue: 5
+    MaxValue: 1000
+    ConstraintDescription: must be between 5 and 10000
+  WriteCapacityUnits:
+    Description: Provisioned write throughput
+    Type: Number
+    Default: 5
+    MinValue: 5
+    MaxValue: 1000
+    ConstraintDescription: must be between 5 and 100000
+Resources:
+  Books:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "AuthorName"
+          AttributeType: "S"
+        - AttributeName: "BookTitle"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "AuthorName"
+          KeyType: "HASH"
+        - AttributeName: "BookTitle"
+          KeyType: "RANGE"
+      ProvisionedThroughput:
+        ReadCapacityUnits: !Ref ReadCapacityUnits
+        WriteCapacityUnits: !Ref WriteCapacityUnits
+      TimeToLiveSpecification:
+        AttributeName: TimeToLive
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: CloudFormation Demo
+        - Key: Owner
+          Value: DBA Team
+  LambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Description: Scans and outputs DynamoDB table
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref Books
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+
+          table_name = os.environ['TABLE_NAME']
+
+
+          def lambda_handler(event, context):
+              client = boto3.resource('dynamodb')
+              table = client.Table(table_name)
+              book = {
+                  'AuthorName': event['AuthorName'],
+                  'BookTitle': event['BookTitle'],
+                  'PublishedPublished': event['PublishedPublished'],
+                  'OriginalLanguage': event['OriginalLanguage'],
+                  'ApproximateSales': event['ApproximateSales']
+              }
+              table.put_item(Item=book)
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.12
+      Timeout: 60
+      MemorySize: 128
+  LambdaExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: AllowLambdaLogs
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:*"
+                Resource: arn:aws:logs:*:*:*
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "dynamodb:*"
+                Resource: !GetAtt Books.Arn
+Outputs:
+  TableName:
+    Value: !Ref Books
+    Description: Name of the newly created DynamoDB table

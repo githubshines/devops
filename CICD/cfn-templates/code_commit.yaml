@@ -1,0 +1,52 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  AWS CloudFormation template to build an AWS CodeCommit repo and associated resources
+Parameters:
+  RepositoryName:
+    Description: CodeCommit repository name
+    Type: String
+    Default: cfn-demo-repo
+  BranchName:
+    Description: CodeCommit branch name
+    Type: String
+    Default: master
+Resources:
+  DemoSNSTopic:
+    Type: "AWS::SNS::Topic"
+    Properties:
+      TopicName: "cfn-demo-code-commit-topic"
+  DemoRepo:
+    Type: "AWS::CodeCommit::Repository"
+    Properties:
+      RepositoryName: !Ref RepositoryName
+      RepositoryDescription: A repository for CloudFormation demo source code
+      Triggers:
+        - Name: MasterTrigger
+          DestinationArn:
+            Ref: DemoSNSTopic
+          Branches:
+            - master
+          Events:
+            - all
+Outputs:
+  RepositoryName:
+    Value: !Ref RepositoryName
+    Description: CodeCommit repository name
+    Export:
+      Name: !Join ["-", [!Ref "AWS::StackName", "repository-name"]]
+  BranchName:
+    Value: !Ref BranchName
+    Description: CodeCommit branch name
+    Export:
+      Name: !Join ["-", [!Ref "AWS::StackName", "branch-name"]]
+  RepositoryUrl:
+    Value: !Join
+      - ""
+      - - "https://git-codecommit."
+        - !Ref "AWS::Region"
+        - ".amazonaws.com/v1/repos/"
+        - !Ref RepositoryName
+    Description: CodeCommit repository URL
+    Export:
+      Name: !Join ["-", [!Ref "AWS::StackName", "repository-url"]]

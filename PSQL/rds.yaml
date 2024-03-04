@@ -1,0 +1,149 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: "RDS configuration"
+
+Parameters:
+  DBAllocatedStorage:
+    Type: Number
+    Default: "5"
+    ConstraintDescription: Must be between 5 and 6144.
+    Description: The size of the database in GB.
+    MaxValue: "6144"
+    MinValue: "5"
+
+  DatabaseClass:
+    Type: String
+    Default: db.t3.micro
+    AllowedValues:
+      - db.t3.micro
+      - db.m1.small
+      - db.m1.large
+      - db.m1.xlarge
+      - db.m2.xlarge
+    ConstraintDescription: must select a valid database instance type.
+    Description: Database instance class
+
+  PostgresDBName:
+    Type: String
+    Default: pgdb
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+    Description: The database name
+    MaxLength: "8"
+    MinLength: "1"
+
+  PublicSubnetAReference:
+    Type: String
+    Default: VPC1-SubnetsPrivate1
+    Description: "Reference to public subnet A as part of VPC1."
+
+  PublicSubnetBReference:
+    Type: String
+    Default: VPC1-SubnetsPrivate2
+    Description: "Reference to public subnet B as part of VPC1."
+
+  SSHLocation:
+    Type: String
+    Default: "0.0.0.0/0"
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Description: "IP address used to connect to the RDS instance."
+    MaxLength: "18"
+    MinLength: "9"
+
+  VPCReference:
+    Type: String
+    Default: VPC1-VPC
+    Description: "Reference to VPC deployed as part of stack VPC1."
+
+Resources:
+  MyRDSSecrets:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: 'This is the secret for my RDS instance'
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "firstuser"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 16
+        ExcludeCharacters: '"@/\'
+  DatabaseEC2SecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Frontend Access
+      SecurityGroupIngress:
+        - CidrIp: !Ref SSHLocation
+          FromPort: 5432
+          IpProtocol: tcp
+          ToPort: 5432
+      VpcId: !ImportValue
+        Ref: VPCReference
+
+  DatabaseParameterGroup:
+    Type: "AWS::RDS::DBParameterGroup"
+    Properties:
+      Description: Database Parameter Group + pg_stat_statements
+      Family: postgres16
+      Parameters:
+        shared_preload_libraries: pg_stat_statements
+
+  DatabaseSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: DB Private Subnet
+      SubnetIds:
+        - "Fn::ImportValue": !Ref PublicSubnetAReference
+        - "Fn::ImportValue": !Ref PublicSubnetBReference
+
+  PostgresDB:
+    Type: "AWS::RDS::DBInstance"
+    Properties:
+      AllocatedStorage: !Ref DBAllocatedStorage
+      DBInstanceClass: !Ref DatabaseClass
+      DBName: !Ref PostgresDBName
+      DBParameterGroupName: !Ref DatabaseParameterGroup
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      Engine: postgres
+      MasterUsername: !Join ['', ['{{resolve:secretsmanager:', !Ref MyRDSSecrets, ':SecretString:username}}' ]]
+      MasterUserPassword: !Join ['', ['{{resolve:secretsmanager:', !Ref MyRDSSecrets, ':SecretString:password}}' ]]
+      PubliclyAccessible: true
+      VPCSecurityGroups:
+        - !GetAtt DatabaseEC2SecurityGroup.GroupId
+
+Outputs:
+  JDBCConnectionString:
+    Description: JDBC connection string for database
+    Value: !Join
+      - ""
+      - - "jdbc:postgresql://"
+        - "Fn::GetAtt":
+            - PostgresDB
+            - Endpoint.Address
+        - ":"
+        - "Fn::GetAtt":
+            - PostgresDB
+            - Endpoint.Port
+        - /
+        - Ref: PostgresDBName
+    Export:
+      Name: !Sub "${AWS::StackName}-rds-jdbc-conn"
+
+  PostgresConnectionString:
+    Description: "'psql' connection string for database"
+    Value: !Join
+      - ""
+      - - "postgresql://"
+        - firstuser
+        - ":"
+        - password
+        - "@"
+        - "Fn::GetAtt":
+            - PostgresDB
+            - Endpoint.Address
+        - ":"
+        - "Fn::GetAtt":
+            - PostgresDB
+            - Endpoint.Port
+        - /
+        - Ref: PostgresDBName
+    Export:
+      Name: !Sub "${AWS::StackName}-rds-psql-conn"

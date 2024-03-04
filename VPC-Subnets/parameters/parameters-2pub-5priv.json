@@ -1,0 +1,14 @@
+[
+    {
+      "ParameterKey": "ClassB",
+      "ParameterValue": "0"
+    },
+    {
+      "ParameterKey": "PublicSubnets",
+      "ParameterValue": "Two"
+    },
+    {
+        "ParameterKey": "PrivateSubnets",
+        "ParameterValue": "Five"
+      }
+  ]

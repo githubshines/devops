@@ -1,0 +1,1 @@
+aws cloudformation create-stack --stack-name pub2-priv2 --template-body file://../VPC-Dynamic.yaml --parameters file://../parameters/parameters-2pub-2priv.json --capabilities CAPABILITY_AUTO_EXPAND

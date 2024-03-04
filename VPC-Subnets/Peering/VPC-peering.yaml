@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Create peering between vpc 1, and vpc2"
+Parameters:
+  VPC1Reference:
+    Type: String
+    Default: VPC1-VPC
+    Description: "Reference to VPC1 deployed as part of stack VPC1."
+  VPC2Reference:
+    Type: String
+    Default: VPC2-VPC
+    Description: "Reference to VPC2 deployed as part of stack VPC2."
+  VPC1PublicRouteTableReference:
+    Type: String
+    Default: VPC1-PublicRouteTable
+    Description: "Reference to VPC2 deployed as part of stack VPC2."
+  VPC2PublicRouteTableReference:
+    Type: String
+    Default: VPC2-PrivateRouteTable
+    Description: "Reference to VPC2 deployed as part of stack VPC2."
+Resources:
+  vpcPeeringConnection:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties:
+      VpcId: !ImportValue
+        Ref: VPC1Reference
+      PeerVpcId: !ImportValue
+        Ref: VPC2Reference
+      Tags:
+      - Key: Name
+        Value: !Join [":",[!Sub '${AWS::StackName}',"My VPC Peering Connection"]] 
+      
+  VPCPeeringRoute1:
+      Type: AWS::EC2::Route
+      DependsOn: vpcPeeringConnection
+      Properties:
+        RouteTableId: !ImportValue
+          Ref: VPC1PublicRouteTableReference
+        DestinationCidrBlock: 10.1.0.0/16      #This is the vpc2 cidr range 
+        VpcPeeringConnectionId: !Ref vpcPeeringConnection
+
+  VPCPeeringRoute2:
+      Type: AWS::EC2::Route
+      DependsOn: vpcPeeringConnection
+      Properties:
+        RouteTableId: !ImportValue
+          Ref: VPC2PublicRouteTableReference
+        DestinationCidrBlock: 10.0.0.0/16    #This is the vpc1 cidr range 
+        VpcPeeringConnectionId: !Ref vpcPeeringConnection

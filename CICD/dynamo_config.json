@@ -1,0 +1,6 @@
+{
+    "Parameters": {
+        "ReadCapacityUnits": "10",
+        "WriteCapacityUnits": "25"
+    }
+}

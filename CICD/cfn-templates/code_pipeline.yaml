@@ -1,0 +1,295 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  AWS CloudFormation template to build an AWS CodeBuild, CodePipeline, and associated resources
+Parameters:
+  CodeCommitStackName:
+    Type: String
+    Description: "Name of CodeCommit CloudFormation Stack"
+    Default: "cfn-demo-code-commit"
+  TestProjectName:
+    Description: CodeBuild test project name
+    Type: String
+    Default: TestProject
+Resources:
+  TestProject:
+    Type: "AWS::CodeBuild::Project"
+    Properties:
+      Name: !Ref TestProjectName
+      Description: CloudFormation Demo Test Project
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+      Source:
+        BuildSpec: buildspec_test.yml
+        Type: CODEPIPELINE
+      TimeoutInMinutes: 5
+  CodeBuildRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+  DemoSNSTopic:
+    Type: "AWS::SNS::Topic"
+    Properties:
+      TopicName: "cfn-demo-manual-approval-topic"
+  AppPipeline:
+    Type: "AWS::CodePipeline::Pipeline"
+    Properties:
+      Name: cfn-infra-pipeline
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Get_Source_Code
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: "1"
+                Provider: CodeCommit
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                BranchName:
+                  Fn::ImportValue:
+                    !Join ["-", [!Ref "CodeCommitStackName", "branch-name"]]
+                RepositoryName:
+                  Fn::ImportValue:
+                    !Join ["-", [!Ref "CodeCommitStackName", "repository-name"]]
+                PollForSourceChanges: false
+              RunOrder: 1
+        - Name: Test
+          Actions:
+            - Name: Test_CFN_Template
+              InputArtifacts:
+                - Name: SourceOutput
+              ActionTypeId:
+                Category: Test
+                Owner: AWS
+                Version: "1"
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref TestProjectName
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+            - Name: Create_Change_Set
+              InputArtifacts:
+                - Name: SourceOutput
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: "1"
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CHANGE_SET_REPLACE
+                Capabilities: CAPABILITY_IAM
+                ChangeSetName: pipeline-changeset
+                RoleArn: !GetAtt CloudFormationServiceRole.Arn
+                StackName: cfn-lambda-dynamo
+                TemplateConfiguration: "SourceOutput::dynamo_config.json"
+                TemplatePath: "SourceOutput::dynamo.yaml"
+              RunOrder: 1
+            - Name: Approval_Change
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Version: "1"
+                Provider: Manual
+              Configuration:
+                CustomData: Comments on the manual approval
+                NotificationArn: !Ref DemoSNSTopic
+              RunOrder: 2
+            - Name: Execute_Change_Set
+              InputArtifacts:
+                - Name: SourceOutput
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: "1"
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CHANGE_SET_EXECUTE
+                Capabilities: CAPABILITY_IAM
+                ChangeSetName: pipeline-changeset
+                StackName: cfn-lambda-dynamo
+              RunOrder: 3
+      ArtifactStore:
+        Type: S3
+        Location: !Ref CodePipelineArtifactStoreBucket
+  CodePipelineArtifactStoreBucket:
+    Type: "AWS::S3::Bucket"
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Tags:
+        - Key: Project
+          Value: CloudFormation Demo
+        - Key: Owner
+          Value: Gary Stafford
+  AmazonCloudWatchEventRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: /
+      Policies:
+        - PolicyName: pipeline-execution
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: "codepipeline:StartPipelineExecution"
+                Resource: !Join
+                  - ""
+                  - - "arn:aws:codepipeline:"
+                    - !Ref "AWS::Region"
+                    - ":"
+                    - !Ref "AWS::AccountId"
+                    - ":"
+                    - !Ref AppPipeline
+  AmazonCloudWatchEventRule:
+    Type: "AWS::Events::Rule"
+    Properties:
+      EventPattern:
+        source:
+          - aws.codecommit
+        detail-type:
+          - CodeCommit Repository State Change
+        resources:
+          - !Join
+            - ""
+            - - "arn:aws:codecommit:"
+              - !Ref "AWS::Region"
+              - ":"
+              - !Ref "AWS::AccountId"
+              - ":"
+              - Fn::ImportValue:
+                  !Join ["-", [!Ref "CodeCommitStackName", "repository-name"]]
+        detail:
+          event:
+            - referenceCreated
+            - referenceUpdated
+          referenceType:
+            - branch
+          referenceName:
+            - Fn::ImportValue:
+                !Join ["-", [!Ref "CodeCommitStackName", "branch-name"]]
+      Targets:
+        - Arn: !Join
+            - ""
+            - - "arn:aws:codepipeline:"
+              - !Ref "AWS::Region"
+              - ":"
+              - !Ref "AWS::AccountId"
+              - ":"
+              - !Ref AppPipeline
+          RoleArn: !GetAtt
+            - AmazonCloudWatchEventRole
+            - Arn
+          Id: codepipeline-AppPipeline
+  CodePipelineServiceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: /
+      Policies:
+        - PolicyName: AWS-CodePipeline-Service-3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "codecommit:CancelUploadArchive"
+                  - "codecommit:GetBranch"
+                  - "codecommit:GetCommit"
+                  - "codecommit:GetUploadArchiveStatus"
+                  - "codecommit:UploadArchive"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "codedeploy:CreateDeployment"
+                  - "codedeploy:GetApplicationRevision"
+                  - "codedeploy:GetDeployment"
+                  - "codedeploy:GetDeploymentConfig"
+                  - "codedeploy:RegisterApplicationRevision"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "codebuild:BatchGetBuilds"
+                  - "codebuild:StartBuild"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "lambda:InvokeFunction"
+                  - "lambda:ListFunctions"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "iam:PassRole"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "elasticbeanstalk:*"
+                  - "ec2:*"
+                  - "elasticloadbalancing:*"
+                  - "autoscaling:*"
+                  - "cloudwatch:*"
+                  - "s3:*"
+                  - "sns:*"
+                  - "cloudformation:*"
+                  - "rds:*"
+                  - "sqs:*"
+                  - "ecs:*"
+                Resource: "*"
+  CloudFormationServiceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - cloudformation.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: /
+      Policies:
+        - PolicyName: AWS-CodePipeline-CloudFormation
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "iam:PassRole"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "dynamodb:*"
+                  - "lambda:*"
+                  - "iam:*"
+                Resource: "*"
