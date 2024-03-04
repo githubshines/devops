@@ -44,29 +44,26 @@ This stack exports VPCID, VPC-CIDR, Subnet ID's, Subnet ID CIDRs which will be i
 
 Create the psql rds using cloudformation script present in PSQL folder. Run the "CreatePSQL.bat" to deplo the PSQL which runs the command as below
 
-PSQL : aws cloudformation create-stack --stack-name PSQL --template-body file://rds.yaml
+**PSQL **: aws cloudformation create-stack --stack-name PSQL --template-body file://rds.yaml
 
 Create API Gateway by using the cloudformation script inside APIGW-Lambda folder. Run the command CreateAPIGateway.bat to create API gateway and Lambda function
 
-APIGateway : aws cloudformation create-stack --stack-name APIGW-Lambda --template-body file://api-gw.yaml --capabilities CAPABILITY_IAM
+**APIGateway **: aws cloudformation create-stack --stack-name APIGW-Lambda --template-body file://api-gw.yaml --capabilities CAPABILITY_IAM
 
-Code Pipeline : Code build and Code pipeline deployment using CLoudformation. Run the bat file CreateRoleandCode.bat followed by CreateMasterBranch.bat to deploy the stack. It also deploys a Lambda using CLoudformation within the pipeline with Manual approval stage for the code deployment.
+**Code Pipeline** : Code build and Code pipeline deployment using CLoudformation. Run the bat file CreateRoleandCode.bat followed by CreateMasterBranch.bat to deploy the stack. It also deploys a Lambda using CLoudformation within the pipeline with Manual approval stage for the code deployment.
 
 **Best Practices**
 
-Used Same VPC template to create multiple VPC-Subnets by parameterizing and using Cloud formation Intrinsic function.
+* Used Same VPC template to create multiple VPC-Subnets by parameterizing and using Cloud formation Intrinsic function.
+* Used Stack import to reference the exported resources created by other stacks.
 
-Used Stack import to reference the exported resources created by other stacks.
+* Added the NACL to Subnets based on public and private traffic control
+* Dynamic tagging of resource names to clearly identify the resources
 
-Added the NACL to Subnets based on public and private traffic control
+* Used AWS::ApiGatewayV2::Integration for Integrating Lambda with API gateway
+* Dynamic creation of IAM roles based on Least previleges.
 
-Dynamic tagging of resource names to clearly identify the resources
-
-Used AWS::ApiGatewayV2::Integration for Integrating Lambda with API gateway
-
-Dynamic creation of IAM roles based on Least previleges.
-
-Used AWS SecretsManager to store the PSQL credentials
+* Used AWS SecretsManager to store the PSQL credentials
 
 
 **Screenshot references**
